@@ -41,7 +41,7 @@ jobs:
             --project dotnet-api \
             --out reports \
             --format ALL \
-            --disableNvd \
+            --noupdate \
             --failOnCVSS 11 \
             --scan "**/*.csproj"
 
