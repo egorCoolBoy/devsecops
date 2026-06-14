@@ -42,6 +42,7 @@ jobs:
               --format JSON \
               --project dotnet-api \
               --nvdApiKey "${{ secrets.NVD_API_KEY }}" \
+              --disableCentral \
               --out reports \
               --failOnCVSS 11
 
