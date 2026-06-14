@@ -1,0 +1,266 @@
+name: Security Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+
+jobs:
+  # -------------------------
+  # BUILD
+  # -------------------------
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t my-dotnet-api .
+
+      - name: Save image
+        run: docker save my-dotnet-api > image.tar
+
+      - name: Upload build artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: image.tar
+          retention-days: 7
+
+  # -------------------------
+  # SAST (Semgrep + custom rules)
+  # -------------------------
+  sast:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Semgrep scan (semgrep-rules.yml)
+        run: |
+          docker run --rm \
+            -v "$PWD:/src" \
+            -w /src \
+            --entrypoint semgrep \
+            semgrep/semgrep \
+            --config semgrep-rules.yml \
+            --no-git-ignore . \
+            --json \
+            --output semgrep-report.json || true
+
+      - name: Format Semgrep report
+        if: always()
+        run: |
+          if [ -f semgrep-report.json ]; then
+            python3 -m json.tool semgrep-report.json > semgrep-report-pretty.json
+          else
+            echo '{"error": "semgrep-report.json was not generated"}' > semgrep-report-pretty.json
+          fi
+
+      - name: Upload Semgrep artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-reports
+          path: |
+            semgrep-report.json
+            semgrep-report-pretty.json
+          retention-days: 7
+
+  # -------------------------
+  # DAST (OWASP ZAP + custom rules)
+  # -------------------------
+  dast:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker compose build
+
+      - name: Start stack
+        run: docker compose up -d
+
+      - name: Wait for API
+        run: |
+          echo "Waiting for API..."
+          for i in $(seq 1 40); do
+            if curl -fsS http://localhost:8080/swagger/v1/swagger.json > /dev/null; then
+              echo "API is ready"
+              exit 0
+            fi
+            echo "Attempt $i/40..."
+            sleep 3
+          done
+          echo "API did not become ready in time"
+          docker compose logs backend
+          exit 1
+
+      - name: Run OWASP ZAP scan (zap-rules.tsv)
+        if: always()
+        run: |
+          mkdir -p zap-output
+          chmod 777 zap-output
+
+          docker run --rm \
+            --name zap-scan \
+            --user root \
+            --network host \
+            -v "$PWD/zap-output:/zap/wrk:rw" \
+            -v "$PWD/zap-rules.tsv:/zap/config/zap-rules.tsv:ro" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-api-scan.py \
+              -t http://localhost:8080/swagger/v1/swagger.json \
+              -f openapi \
+              -c /zap/config/zap-rules.tsv \
+              -r /zap/wrk/zap-report.html \
+              -w /zap/wrk/zap-report.md \
+              -J /zap/wrk/zap-report.json \
+              -I || true
+
+      - name: Format ZAP report
+        if: always()
+        run: |
+          if [ -f zap-output/zap-report.json ]; then
+            python3 -m json.tool zap-output/zap-report.json > zap-output/zap-report-pretty.json
+          else
+            echo '{"error": "zap-report.json was not generated"}' > zap-output/zap-report-pretty.json
+          fi
+
+      - name: Upload ZAP artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-reports
+          path: zap-output/
+          retention-days: 7
+
+      - name: Shutdown
+        if: always()
+        run: docker compose down -v
+
+  # -------------------------
+  # SCA (Dependency Check)
+  # -------------------------
+  sca:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore NuGet packages
+        run: |
+          dotnet restore
+          test -f obj/project.assets.json || (echo "project.assets.json missing" && exit 1)
+
+      - name: Cache Dependency-Check NVD database
+        uses: actions/cache@v4
+        with:
+          path: .dependency-check
+          key: dependency-check-nvd-v1
+          restore-keys: |
+            dependency-check-nvd-
+
+      - name: Dependency Check
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          mkdir -p report .dependency-check
+          chmod -R 777 report .dependency-check
+          rm -f .dependency-check/odc.update.lock
+
+          DC_ARGS=(
+            --scan /src/WebApplication5.csproj
+            --scan /src/obj/project.assets.json
+            --project OsaCrud
+            --format JSON
+            --format HTML
+            --prettyPrint
+            --out /report
+            --log /report/odc.log
+            --failOnCVSS 11
+          )
+
+          if [ -n "$NVD_API_KEY" ]; then
+            DC_ARGS+=(--nvdApiKey "$NVD_API_KEY")
+          fi
+
+          if find .dependency-check -type f -name 'nvdcve*.json' 2>/dev/null | grep -q .; then
+            echo "Using cached NVD database"
+            DC_ARGS+=(--noupdate)
+          else
+            echo "NVD cache missing, downloading database"
+          fi
+
+          set +e
+          docker run --rm \
+            --user root \
+            -v "$PWD:/src:ro" \
+            -v "$PWD/report:/report:rw" \
+            -v "$PWD/.dependency-check:/usr/share/dependency-check/data:rw" \
+            owasp/dependency-check:latest \
+            "${DC_ARGS[@]}"
+          DC_EXIT=$?
+          set -e
+
+          echo "Dependency-Check exit code: $DC_EXIT"
+          ls -laR report || true
+
+          if [ ! -f report/dependency-check-report.json ] && [ ! -f report/dependency-check-report.html ]; then
+            echo "::warning::Dependency-Check reports were not generated"
+            if [ -f report/odc.log ]; then
+              echo "=== odc.log (tail) ==="
+              tail -n 80 report/odc.log || true
+            fi
+          fi
+
+      - name: Format Dependency Check report
+        if: always()
+        run: |
+          REPORT_JSON="report/dependency-check-report.json"
+          if [ ! -f "$REPORT_JSON" ]; then
+            REPORT_JSON="$(find report -maxdepth 1 -name '*.json' ! -name '*-pretty.json' -print -quit)"
+          fi
+
+          if [ -n "$REPORT_JSON" ] && [ -f "$REPORT_JSON" ]; then
+            cp "$REPORT_JSON" report/dependency-check-report.json
+            python3 -m json.tool report/dependency-check-report.json > report/dependency-check-report-pretty.json
+            echo "Vulnerabilities found: $(python3 -c "import json; d=json.load(open('report/dependency-check-report.json')); deps=d.get('dependencies',[]); print(sum(len(x.get('vulnerabilities',[])) for x in deps))")"
+          else
+            echo '{"error": "dependency-check-report.json was not generated"}' > report/dependency-check-report-pretty.json
+          fi
+
+          if [ ! -f report/dependency-check-report.html ]; then
+            HTML_REPORT="$(find report -maxdepth 1 -name '*.html' -print -quit)"
+            if [ -n "$HTML_REPORT" ] && [ -f "$HTML_REPORT" ]; then
+              cp "$HTML_REPORT" report/dependency-check-report.html
+            fi
+          fi
+
+          ls -la report || true
+
+      - name: Upload Dependency Check artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-reports
+          path: |
+            report/dependency-check-report.json
+            report/dependency-check-report-pretty.json
+            report/dependency-check-report.html
+            report/odc.log
+          if-no-files-found: warn
+          retention-days: 7

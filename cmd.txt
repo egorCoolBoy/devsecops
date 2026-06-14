@@ -1,0 +1,12 @@
+semgrep --config semgrep-rules.yml --no-git-ignore . --json --output semgrep-report.json
+docker run --rm -v "${PWD}:/zap/wrk" ghcr.io/zaproxy/zaproxy:stable `
+zap-api-scan.py `
+-t http://host.docker.internal:5000/swagger/v1/swagger.json `
+-f openapi `
+-r report.html `
+-w report.md `
+-J report.json `
+-I
+
+
+python -m json.tool report.json report.json

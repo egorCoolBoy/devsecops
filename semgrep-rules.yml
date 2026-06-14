@@ -1,0 +1,49 @@
+rules:
+  - id: sql-command
+    message: Possible SQL Injection
+    severity: ERROR
+    languages:
+      - csharp
+    pattern: |
+      new SqlCommand(...)
+
+  - id: process-start
+    message: Possible Command Injection
+    severity: ERROR
+    languages:
+      - csharp
+    pattern: |
+      Process.Start(...)
+
+  - id: sql-connection
+    message: Hardcoded connection string
+    severity: WARNING
+    languages:
+      - csharp
+    pattern: |
+      new SqlConnection(...)
+
+  - id: exception-disclosure
+    message: Information disclosure
+    severity: WARNING
+    languages:
+      - csharp
+    pattern: |
+      throw new Exception(...)
+
+  - id: html-content
+    message: Possible XSS
+    severity: WARNING
+    languages:
+      - csharp
+    pattern: |
+      Content(...)
+
+  - id: execute-reader
+    message: Dynamic SQL execution
+    severity: ERROR
+    languages:
+      - csharp
+    pattern: |
+      $CMD.ExecuteReader()
+
