@@ -12,33 +12,37 @@ jobs:
   dependency-check:
     runs-on: ubuntu-latest
 
-    container:
-      image: owasp/dependency-check:latest
-      options: --user root
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Prepare folders
-        run: |
-          mkdir -p dependency-check-report
-          mkdir -p .dependency-check
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
 
-      - name: Run Dependency-Check
+      - name: Download Dependency-Check
+        run: |
+          wget https://github.com/dependency-check/DependencyCheck/releases/download/v12.2.2/dependency-check-12.2.2-release.zip
+          unzip dependency-check-12.2.2-release.zip
+
+      - name: Run scan (stable CI mode)
         continue-on-error: true
         run: |
-          /usr/share/dependency-check/bin/dependency-check.sh \
-            --data .dependency-check \
+          mkdir -p reports
+
+          dependency-check/bin/dependency-check.sh \
             --scan . \
             --format HTML \
             --format JSON \
             --project dotnet-api \
-            --failOnCVSS 11 \
-            --out dependency-check-report
+            --out reports \
+            --noupdate \
+            --failOnCVSS 11
 
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dependency-check-report
-          path: dependency-check-report/
+          path: reports/
