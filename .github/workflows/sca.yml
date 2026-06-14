@@ -21,12 +21,18 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      - name: Cache dependency-check DB
+        uses: actions/cache@v4
+        with:
+          path: ~/.dependency-check
+          key: dependency-check-db
+
       - name: Download Dependency-Check
         run: |
           wget https://github.com/dependency-check/DependencyCheck/releases/download/v12.2.2/dependency-check-12.2.2-release.zip
           unzip dependency-check-12.2.2-release.zip
 
-      - name: Run scan (stable CI mode)
+      - name: Run scan
         continue-on-error: true
         run: |
           mkdir -p reports
@@ -37,7 +43,6 @@ jobs:
             --format JSON \
             --project dotnet-api \
             --out reports \
-            --noupdate \
             --failOnCVSS 11
 
       - name: Upload report
