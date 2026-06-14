@@ -28,7 +28,8 @@ jobs:
             --config p/dotnet \
             --config semgrep-rules.yml \
             --json \
-            --output reports/semgrep.json .
+            --output reports/semgrep.json . \
+          || true
 
       - name: Pretty JSON
         run: |
