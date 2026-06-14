@@ -9,40 +9,72 @@ permissions:
   contents: read
 
 jobs:
-  zap:
+  dast:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Start API
-        run: docker compose up -d --build
+      - name: Build backend image
+        run: docker compose build
+
+      - name: Start stack
+        run: docker compose up -d
 
       - name: Wait for API
         run: |
-          until curl -fsS http://localhost:8080/swagger/v1/swagger.json > /dev/null; do
-            sleep 5
+          echo "Waiting for API..."
+          for i in $(seq 1 40); do
+            if curl -fsS http://localhost:8080/swagger/v1/swagger.json > /dev/null; then
+              echo "API is ready"
+              exit 0
+            fi
+            echo "Attempt $i/40..."
+            sleep 3
           done
+          echo "API did not become ready in time"
+          docker compose logs backend
+          exit 1
 
-      - name: Run ZAP API scan
+      - name: Run OWASP ZAP scan (zap-rules.tsv)
+        if: always()
         run: |
-          docker run --rm --network host \
-            -v "${{ github.workspace }}:/zap/wrk:rw" \
+          mkdir -p zap-output
+          chmod 777 zap-output
+          
+          docker run --rm \
+            --name zap-scan \
+            --user root \
+            --network host \
+            -v "$PWD/zap-output:/zap/wrk:rw" \
+            -v "$PWD/zap-rules.tsv:/zap/config/zap-rules.tsv:ro" \
             ghcr.io/zaproxy/zaproxy:stable \
             zap-api-scan.py \
               -t http://localhost:8080/swagger/v1/swagger.json \
               -f openapi \
-              -c /zap/wrk/zap-rules.tsv \
+              -c /zap/config/zap-rules.tsv \
               -r /zap/wrk/zap-report.html \
               -w /zap/wrk/zap-report.md \
               -J /zap/wrk/zap-report.json \
-              -I
-          
-      - name: Upload ZAP report
+              -I || true
+
+      - name: Format ZAP report
+        if: always()
+        run: |
+          if [ -f zap-output/zap-report.json ]; then
+            python3 -m json.tool zap-output/zap-report.json > zap-output/zap-report-pretty.json
+          else
+            echo '{"error": "zap-report.json was not generated"}' > zap-output/zap-report-pretty.json
+          fi
+
+      - name: Upload ZAP artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: zap-report
-          path: zap/
+          name: zap-reports
+          path: zap-output/
+          retention-days: 7
 
       - name: Shutdown
         if: always()
