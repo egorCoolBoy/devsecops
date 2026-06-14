@@ -147,11 +147,12 @@ jobs:
         run: docker compose down -v
 
   # -------------------------
-  # SCA (Dependency Check)
+  # SCA (OWASP Dependency Check)
   # -------------------------
   sca:
+    name: OWASP Dependency-Check
     runs-on: ubuntu-latest
-
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -161,106 +162,38 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: Restore NuGet packages
-        run: |
-          dotnet restore
-          test -f obj/project.assets.json || (echo "project.assets.json missing" && exit 1)
-
-      - name: Cache Dependency-Check NVD database
-        uses: actions/cache@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
-          path: .dependency-check
-          key: dependency-check-nvd-v1
-          restore-keys: |
-            dependency-check-nvd-
+          distribution: temurin
+          java-version: "21"
 
-      - name: Dependency Check
-        env:
-          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Download Dependency-Check
         run: |
-          mkdir -p report .dependency-check
-          chmod -R 777 report .dependency-check
-          rm -f .dependency-check/odc.update.lock
+          wget https://github.com/dependency-check/DependencyCheck/releases/download/v12.2.2/dependency-check-12.2.2-release.zip
+          unzip dependency-check-12.2.2-release.zip
 
-          DC_ARGS=(
-            --scan /src/WebApplication5.csproj
-            --scan /src/obj/project.assets.json
-            --project OsaCrud
-            --format JSON
-            --format HTML
-            --prettyPrint
-            --out /report
-            --log /report/odc.log
+      - name: Run Dependency-Check scan
+        continue-on-error: true
+        run: |
+          chmod +x dependency-check/bin/dependency-check.sh
+          
+          dependency-check/bin/dependency-check.sh \
+            --scan WebApplication5.csproj \
+            --scan obj/project.assets.json \
+            --project OsaCrud \
+            --format ALL \
+            --prettyPrint \
+            --out report \
             --failOnCVSS 11
-          )
 
-          if [ -n "$NVD_API_KEY" ]; then
-            DC_ARGS+=(--nvdApiKey "$NVD_API_KEY")
-          fi
-
-          if find .dependency-check -type f -name 'nvdcve*.json' 2>/dev/null | grep -q .; then
-            echo "Using cached NVD database"
-            DC_ARGS+=(--noupdate)
-          else
-            echo "NVD cache missing, downloading database"
-          fi
-
-          set +e
-          docker run --rm \
-            --user root \
-            -v "$PWD:/src:ro" \
-            -v "$PWD/report:/report:rw" \
-            -v "$PWD/.dependency-check:/usr/share/dependency-check/data:rw" \
-            owasp/dependency-check:latest \
-            "${DC_ARGS[@]}"
-          DC_EXIT=$?
-          set -e
-
-          echo "Dependency-Check exit code: $DC_EXIT"
-          ls -laR report || true
-
-          if [ ! -f report/dependency-check-report.json ] && [ ! -f report/dependency-check-report.html ]; then
-            echo "::warning::Dependency-Check reports were not generated"
-            if [ -f report/odc.log ]; then
-              echo "=== odc.log (tail) ==="
-              tail -n 80 report/odc.log || true
-            fi
-          fi
-
-      - name: Format Dependency Check report
-        if: always()
-        run: |
-          REPORT_JSON="report/dependency-check-report.json"
-          if [ ! -f "$REPORT_JSON" ]; then
-            REPORT_JSON="$(find report -maxdepth 1 -name '*.json' ! -name '*-pretty.json' -print -quit)"
-          fi
-
-          if [ -n "$REPORT_JSON" ] && [ -f "$REPORT_JSON" ]; then
-            cp "$REPORT_JSON" report/dependency-check-report.json
-            python3 -m json.tool report/dependency-check-report.json > report/dependency-check-report-pretty.json
-            echo "Vulnerabilities found: $(python3 -c "import json; d=json.load(open('report/dependency-check-report.json')); deps=d.get('dependencies',[]); print(sum(len(x.get('vulnerabilities',[])) for x in deps))")"
-          else
-            echo '{"error": "dependency-check-report.json was not generated"}' > report/dependency-check-report-pretty.json
-          fi
-
-          if [ ! -f report/dependency-check-report.html ]; then
-            HTML_REPORT="$(find report -maxdepth 1 -name '*.html' -print -quit)"
-            if [ -n "$HTML_REPORT" ] && [ -f "$HTML_REPORT" ]; then
-              cp "$HTML_REPORT" report/dependency-check-report.html
-            fi
-          fi
-
-          ls -la report || true
-
-      - name: Upload Dependency Check artifacts
+      - name: Upload Dependency-Check reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: dependency-check-reports
-          path: |
-            report/dependency-check-report.json
-            report/dependency-check-report-pretty.json
-            report/dependency-check-report.html
-            report/odc.log
-          if-no-files-found: warn
-          retention-days: 7
+          name: dependency-check-report
+          path: report/dependency-check-report.*
+
