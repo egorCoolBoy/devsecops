@@ -31,19 +31,19 @@ jobs:
         run: |
           wget https://github.com/dependency-check/DependencyCheck/releases/download/v12.2.2/dependency-check-12.2.2-release.zip
           unzip dependency-check-12.2.2-release.zip
-
       - name: Run scan
         continue-on-error: true
         run: |
-          mkdir -p reports
-
-          dependency-check/bin/dependency-check.sh \
-            --scan . \
-            --format HTML \
-            --format JSON \
-            --project dotnet-api \
-            --out reports \
-            --failOnCVSS 11
+            mkdir -p reports
+            
+            dependency-check/bin/dependency-check.sh \
+              --scan . \
+              --format HTML \
+              --format JSON \
+              --project dotnet-api \
+              --nvdApiKey "${{ secrets.NVD_API_KEY }}" \
+              --out reports \
+              --failOnCVSS 11
 
       - name: Upload report
         if: always()
