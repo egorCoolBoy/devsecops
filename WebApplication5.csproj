@@ -38,4 +38,9 @@
       <Content Include=".github\workflows\sca.yml" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="reports\" />
+      <Folder Include="zap-output\" />
+    </ItemGroup>
+
 </Project>

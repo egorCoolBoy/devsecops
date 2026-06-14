@@ -4,3 +4,5 @@ obj/
 zap-output/
 report/
 security/reports/
+reports/
+report.json

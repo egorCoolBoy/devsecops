@@ -1,12 +1,8 @@
-semgrep --config semgrep-rules.yml --no-git-ignore . --json --output semgrep-report.json
-docker run --rm -v "${PWD}:/zap/wrk" ghcr.io/zaproxy/zaproxy:stable `
-zap-api-scan.py `
--t http://host.docker.internal:5000/swagger/v1/swagger.json `
--f openapi `
--r report.html `
--w report.md `
--J report.json `
--I
+semgrep --config semgrep-rules.yml --no-git-ignore . --json --output report.json
 
+
+docker run --rm --user root --network host -v "${PWD}/zap-output:/zap/wrk:rw" -v "${PWD}/zap-rules.tsv:/zap/config/zap-rules.tsv:ro" ghcr.io/zaproxy/zaproxy:stable zap-api-scan.py -t http://localhost:8080/swagger/v1/swagger.json -f openapi -c /zap/config/zap-rules.tsv -r /zap/wrk/zap-report.html -w /zap/wrk/zap-report.md -J /zap/wrk/zap-report.json -I
+
+docker run --rm -v "${PWD}:/src" -v "$env:USERPROFILE/.dependency-check:/usr/share/dependency-check/data" owasp/dependency-check:latest --scan /src --format HTML --format JSON --project dotnet-api --nvdApiKey baa19fce-aee4-4755-815b-88e9879e0b19 --out /src/reports --failOnCVSS 11
 
 python -m json.tool report.json report.json
