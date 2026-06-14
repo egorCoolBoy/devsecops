@@ -39,7 +39,13 @@ jobs:
             --format ALL \
             --project dotnet-api \
             --out reports \
+            --disableNvd \
             --failOnCVSS 11
+      - name: Cache OWASP DB
+        uses: actions/cache@v4
+        with:
+          path: ~/.dependency-check
+          key: dependency-check-db
 
       - name: Upload report
         if: always()
