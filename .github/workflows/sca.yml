@@ -38,12 +38,12 @@ jobs:
           mkdir -p reports
 
           dependency-check/bin/dependency-check.sh \
-            --scan . \
-            --format ALL \
             --project dotnet-api \
             --out reports \
+            --format ALL \
             --disableNvd \
-            --failOnCVSS 11
+            --failOnCVSS 11 \
+            --scan "**/*.csproj"
 
       - name: Upload report
         if: always()
