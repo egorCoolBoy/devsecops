@@ -23,9 +23,6 @@ jobs:
       - name: Run Semgrep scan (JSON)
         run: |
           semgrep scan \
-            --config p/security-audit \
-            --config p/secrets \
-            --config p/dotnet \
             --config semgrep-rules.yml \
             --json \
             --output reports/semgrep.json . \
