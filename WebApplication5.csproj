@@ -33,7 +33,9 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Content Include=".github\workflows\devsec.yml" />
+      <Content Include=".github\workflows\dast.yml" />
+      <Content Include=".github\workflows\sast.yml" />
+      <Content Include=".github\workflows\sca.yml" />
     </ItemGroup>
 
 </Project>

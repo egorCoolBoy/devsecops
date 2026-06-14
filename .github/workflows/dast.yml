@@ -1,0 +1,51 @@
+name: OWASP ZAP DAST
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  zap:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start API
+        run: docker compose up -d --build
+
+      - name: Wait for API
+        run: |
+          until curl -fsS http://localhost:8080/swagger/v1/swagger.json > /dev/null; do
+            sleep 5
+          done
+
+      - name: Run ZAP API scan
+        run: |
+          mkdir -p zap
+
+          docker run --rm --network host \
+            -v "${{ github.workspace }}:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-api-scan.py \
+              -t http://localhost:8080/swagger/v1/swagger.json \
+              -f openapi \
+              -c zap-rules.tsv \
+              -r zap/zap-report.html \
+              -w zap/zap-report.md \
+              -J zap/zap-report.json \
+              -I
+
+      - name: Upload ZAP report
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: zap/
+
+      - name: Shutdown
+        if: always()
+        run: docker compose down -v

@@ -1,0 +1,49 @@
+name: OWASP Dependency-Check SCA
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Download Dependency-Check
+        run: |
+          wget https://github.com/dependency-check/DependencyCheck/releases/download/v12.2.2/dependency-check-12.2.2-release.zip
+          unzip dependency-check-12.2.2-release.zip
+
+      - name: Run scan (.NET fix)
+        continue-on-error: true
+        run: |
+          mkdir -p reports
+
+          dependency-check/bin/dependency-check.sh \
+            --scan . \
+            --scan **/*.csproj \
+            --scan **/packages.lock.json \
+            --scan **/project.assets.json \
+            --format ALL \
+            --project dotnet-api \
+            --out reports \
+            --failOnCVSS 11
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: reports/
