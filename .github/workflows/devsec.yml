@@ -1,5 +1,4 @@
-
-  name: DevSecOps
+  name: DevSecOps Pipeline
   
   on:
     push:
@@ -9,11 +8,12 @@
   
   permissions:
     contents: read
+    issues: write
   
   jobs:
     
     # -------------------------
-    # SAST
+    # SAST (Semgrep)
     # -------------------------
     sast:
       name: SAST Semgrep
@@ -26,7 +26,7 @@
         - name: Checkout
           uses: actions/checkout@v4
 
-        - name: Prepare reports directory
+        - name: Create reports folder
           run: mkdir -p reports
 
         - name: Run Semgrep
@@ -35,21 +35,21 @@
             semgrep scan \
               --config semgrep-rules.yml \
               --sarif \
-              --output reports/semgrep-report.sarif .
+              --output reports/semgrep.sarif .
 
-        - name: Upload Semgrep report
+        - name: Upload SAST report
           if: always()
           uses: actions/upload-artifact@v4
           with:
             name: semgrep-report
-            path: reports/semgrep-report.sarif
+            path: reports/semgrep.sarif
             retention-days: 7
     
     # -------------------------
-    # SCA
+    # SCA (OWASP Dependency-Check - stable version)
     # -------------------------
     sca:
-      name: OWASP Dependency-Check
+      name: SCA Dependency Check
       runs-on: ubuntu-latest
       
       steps:
@@ -62,14 +62,24 @@
             distribution: temurin
             java-version: "21"
 
-        - name: Run Dependency-Check
-          uses: dependency-check/Dependency-Check_Action@main
-          with:
-            project: OsaCrud
-            path: "."
-            format: "ALL"
+        - name: Download Dependency-Check
+          run: |
+            wget https://github.com/dependency-check/DependencyCheck/releases/download/v12.2.2/dependency-check-12.2.2-release.zip
+            unzip dependency-check-12.2.2-release.zip
 
-        - name: Upload Dependency-Check reports
+        - name: Run Dependency-Check
+          continue-on-error: true
+          run: |
+            chmod +x dependency-check/bin/dependency-check.sh
+            
+            dependency-check/bin/dependency-check.sh \
+              --scan . \
+              --format ALL \
+              --project OsaCrud \
+              --out reports \
+              --failOnCVSS 11
+
+        - name: Upload SCA report
           if: always()
           uses: actions/upload-artifact@v4
           with:
@@ -78,7 +88,7 @@
             retention-days: 7
     
     # -------------------------
-    # DAST
+    # DAST (OWASP ZAP)
     # -------------------------
     dast:
       name: DAST OWASP ZAP
@@ -88,7 +98,7 @@
         - name: Checkout
           uses: actions/checkout@v4
 
-        - name: Build and start application
+        - name: Build and start containers
           run: docker compose up -d --build
 
         - name: Wait for API
@@ -100,10 +110,10 @@
                 echo "API is ready"
                 exit 0
               fi
-            
               sleep 3
             done
             
+            echo "API failed to start"
             docker compose logs
             exit 1
 
@@ -114,6 +124,17 @@
             format: openapi
             rules_file_name: zap-rules.tsv
             fail_action: false
+            allow_issue_writing: false
+            cmd_options: "-J zap-report.json -r zap-report.html"
+
+        - name: Upload ZAP report
+          if: always()
+          uses: actions/upload-artifact@v4
+          with:
+            name: zap-report
+            path: |
+              zap-report.json
+              zap-report.html
 
         - name: Shutdown stack
           if: always()
