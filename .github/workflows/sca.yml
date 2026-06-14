@@ -34,8 +34,7 @@ jobs:
             --format JSON \
             --project dotnet-api \
             --failOnCVSS 11 \
-            --out dependency-check-report \
-            --noupdate
+            --out dependency-check-report
 
       - name: Upload report
         if: always()
