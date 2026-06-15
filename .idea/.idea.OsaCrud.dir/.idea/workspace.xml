@@ -11,7 +11,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="e6f0d3a6-8512-48ac-93e8-cb23b1046ebc" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/vuln/VulnerableController.cs" beforeDir="false" afterPath="$PROJECT_DIR$/vuln/VulnerableController.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.idea.OsaCrud.dir/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.OsaCrud.dir/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -166,7 +166,7 @@
       <workItem from="1781252029928" duration="9195000" />
       <workItem from="1781288341492" duration="3936000" />
       <workItem from="1781425459828" duration="29306000" />
-      <workItem from="1781495653407" duration="471000" />
+      <workItem from="1781495653407" duration="1318000" />
     </task>
     <servers />
   </component>
