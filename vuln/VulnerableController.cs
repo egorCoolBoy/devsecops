@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using System.Diagnostics;
+using System.Web;
 
 namespace WebApplication5.vuln;
 
@@ -33,17 +34,24 @@ public class VulnerableController : ControllerBase
     [HttpGet("ping")]
     public IActionResult Ping(string host)
     {
+        // if (!Regex.IsMatch(host, @"^[a-zA-Z0-9.\-]+$"))
+        //     return BadRequest("Invalid host format");
+        //
+        // var process = new Process();
+        // process.StartInfo.FileName = "ping";
+        // process.StartInfo.Arguments = host;
+        // process.StartInfo.UseShellExecute = false; // не через cmd.exe
+        // process.Start();
+        //
+        // return Ok("Ping executed");
+        
+        
         Process.Start("cmd.exe", "/c ping " + host);
 
         return Ok("Ping executed");
     }
 
-    // Reflected XSS
-    [HttpGet("hello")]
-    public IActionResult Hello(string name)
-    {
-        return Content($"<h1>Hello {name}</h1>", "text/html");
-    }
+    
 
     // Information disclosure
     [HttpGet("error")]
