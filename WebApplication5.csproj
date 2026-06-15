@@ -35,7 +35,7 @@
     <ItemGroup>
       <Content Include=".github\workflows\dast.yml" />
       <Content Include=".github\workflows\sast.yml" />
-      <Content Include=".github\workflows\sca.yml" />
+      <Content Include=".github\workflows\dependency-check.yml" />
     </ItemGroup>
 
     <ItemGroup>

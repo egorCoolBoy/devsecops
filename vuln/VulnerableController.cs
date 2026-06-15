@@ -51,7 +51,14 @@ public class VulnerableController : ControllerBase
         return Ok("Ping executed");
     }
 
-    
+    // Reflected XSS
+    [HttpGet("hello")]
+    public IActionResult Hello(string name)
+    {
+        // var safeName = HttpUtility.HtmlEncode(name);
+        // return Content($"<h1>Hello {safeName}</h1>", "text/html");
+        return Content($"<h1>Hello {name}</h1>", "text/html");
+    }
 
     // Information disclosure
     [HttpGet("error")]
